@@ -227,7 +227,46 @@ UNSIGNED
 fi
 
 cd "$root"
-cp site/index.html "$public/index.html"
+
+# The landing page's install instructions depend on whether this build
+# actually signed the Release file. Writing them here rather than in
+# site/index.html is the point: a hardcoded `signed-by=` snippet on an
+# unsigned repository sends every reader into an `apt update` failure, and a
+# hardcoded `trusted=yes` snippet teaches people to disable verification long
+# after it started working.
+if [ -f "$public/vab-archive-keyring.gpg" ]; then
+  cat > "$work/install.html" <<'HTML'
+<h2>Add the repository</h2>
+<pre><code>curl -fsSL https://vincentarelbundock.github.io/apt/vab-archive-keyring.gpg \
+  | sudo tee /usr/share/keyrings/vab-archive-keyring.gpg &gt; /dev/null
+
+echo "deb [signed-by=/usr/share/keyrings/vab-archive-keyring.gpg] \
+https://vincentarelbundock.github.io/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/vab.list &gt; /dev/null
+
+sudo apt-get update</code></pre>
+HTML
+else
+  cat > "$work/install.html" <<'HTML'
+<h2>Add the repository</h2>
+<p class="warn"><strong>This repository is not signed yet.</strong> The entry
+below carries <code>trusted=yes</code>, which tells apt to accept the packages
+without verifying where they came from. If you would rather not do that,
+download the <code>.deb</code> you want from the project's own releases page
+instead.</p>
+<pre><code>echo "deb [trusted=yes] https://vincentarelbundock.github.io/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/vab.list &gt; /dev/null
+
+sudo apt-get update</code></pre>
+HTML
+fi
+
+# Splice it in, then drop the placeholder line itself.
+awk -v f="$work/install.html" '
+  /<!--INSTALL-SNIPPET-->/ { while ((getline line < f) > 0) print line; next }
+  { print }
+' site/index.html > "$public/index.html"
+
 rm -rf "$work"
 
 echo

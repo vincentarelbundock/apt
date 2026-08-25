@@ -23,6 +23,8 @@
   th, td { text-align: left; padding: .5rem .75rem .5rem 0; border-bottom: 1px solid var(--line); }
   th { font-weight: 600; }
   a { color: inherit; }
+  p.warn { border-left: 3px solid #c08a2e; background: color-mix(in srgb, #c08a2e 8%, transparent);
+           padding: .75rem 1rem; border-radius: 0 4px 4px 0; margin: 0 0 1rem; }
   footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .875rem; }
 </style>
 </head>
@@ -31,15 +33,7 @@
 <h1>vab apt repository</h1>
 <p class="lede">Debian and Ubuntu packages for a few command-line tools, rebuilt nightly from their GitHub releases.</p>
 
-<h2>Add the repository</h2>
-<pre><code>curl -fsSL https://vincentarelbundock.github.io/apt/vab-archive-keyring.gpg \
-  | sudo tee /usr/share/keyrings/vab-archive-keyring.gpg &gt; /dev/null
-
-echo "deb [signed-by=/usr/share/keyrings/vab-archive-keyring.gpg] \
-https://vincentarelbundock.github.io/apt stable main" \
-  | sudo tee /etc/apt/sources.list.d/vab.list &gt; /dev/null
-
-sudo apt-get update</code></pre>
+<!--INSTALL-SNIPPET-->
 
 <h2>Install</h2>
 <pre><code>sudo apt-get install calepin
