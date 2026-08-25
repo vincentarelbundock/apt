@@ -1,0 +1,40 @@
+# scrutin publishes cargo-dist tarballs but no native packages of its own, so
+# the .deb is built here from the released binary. If scrutin later grows its
+# own packaging, delete this file and give the project a `deb_pattern` in
+# projects.json instead: serving upstream's own bytes is always preferable,
+# because upstream is the one that knows its dependencies.
+#
+# build-repo.sh supplies PKG_VERSION and PKG_ARCH, and stages the released
+# binary at the path below. nfpm expands environment variables in scalar
+# fields like `version`, but not in `contents[].src`, so the staging path is
+# written out rather than passed in.
+
+name: scrutin
+version: ${PKG_VERSION}
+arch: ${PKG_ARCH}
+platform: linux
+maintainer: Vincent Arel-Bundock <vincent@arelbundock.com>
+description: |
+  Quality dashboard, file watcher, and parallel runner.
+  Scrutin runs unit tests, linters and data validators across R and Python
+  projects, watches files for changes, and reruns what failed. It drives
+  testthat, tinytest, pytest, pointblank, validate, Great Expectations, ruff
+  and friends.
+vendor: Vincent Arel-Bundock
+homepage: https://vincentarelbundock.github.io/scrutin
+license: MIT
+section: devel
+priority: optional
+
+depends:
+  - libc6
+
+suggests:
+  # The runners scrutin drives are all discovered at run time; a user wants
+  # some subset of them, so none can be a hard dependency.
+  - r-base-core
+  - python3
+
+contents:
+  - src: ./.work/staging/scrutin
+    dst: /usr/bin/scrutin
