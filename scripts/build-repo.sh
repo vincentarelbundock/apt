@@ -159,10 +159,51 @@ if [ -n "${APT_GPG_PRIVATE_KEY:-}" ]; then
   export GNUPGHOME="$work/gnupg"
   mkdir -p "$GNUPGHOME"; chmod 700 "$GNUPGHOME"
   printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --quiet --import
-  keyid="$(gpg --list-secret-keys --with-colons | awk -F: '/^sec:/ { print $5; exit }')"
-  [ -n "$keyid" ] || { echo "APT_GPG_PRIVATE_KEY imported no secret key" >&2; exit 1; }
+  # What to sign with. The key in APT_GPG_PRIVATE_KEY may be a dedicated
+  # archive key exported whole, or a signing subkey of a personal key exported
+  # on its own. The second shape is the better one, because it keeps the
+  # primary secret out of CI: a leaked subkey costs one revoked subkey, a
+  # leaked primary costs the whole identity. It also means the primary secret
+  # is absent here, so gpg has to be pointed at that exact subkey with a
+  # trailing "!" rather than being left to choose for itself.
+  #
+  # In --with-colons output, field 12 is a key's own capabilities ("s" for
+  # signing) and field 15 is "+" when its secret material is actually present.
+  # A subkey that was not exported has neither.
+  colons="$(gpg --list-secret-keys --with-colons)"
+  signkey="$(printf %s "$colons" |
+    awk -F: '$1 == "ssb" && $12 ~ /s/ && $15 == "+" { print $5 "!"; exit }')"
+  if [ -z "$signkey" ]; then
+    signkey="$(printf %s "$colons" |
+      awk -F: '$1 == "sec" && $12 ~ /s/ && $15 == "+" { print $5; exit }')"
+  fi
+  if [ -z "$signkey" ]; then
+    echo "APT_GPG_PRIVATE_KEY imported no key that can sign" >&2
+    exit 1
+  fi
 
-  gpgopts=(--batch --yes --quiet --local-user "$keyid")
+  # The keyring users install is the whole public key, primary and subkeys, so
+  # it keeps working when the signing subkey is rotated.
+  primary="$(printf %s "$colons" | awk -F: '$1 == "fpr" { print $10; exit }')"
+
+  # An expired archive key makes `apt update` fail for every user, with an
+  # error that does not obviously say why, and extending the expiry upstream
+  # does not help anyone who already installed the keyring file. So an expiry
+  # is worth being loud about well before it lands.
+  expiry="$(printf %s "$colons" |
+    awk -F: -v k="${signkey%!}" \
+      '($1 == "sec" || $1 == "ssb") && $5 == k { print $7; exit }')"
+  if [ -n "$expiry" ] && [ "$expiry" != "0" ]; then
+    days=$(( (expiry - $(date +%s)) / 86400 ))
+    if [ "$days" -lt 0 ]; then
+      echo "signing key ${signkey%!} expired $(( -days )) days ago; publishing would break apt update for every user" >&2
+      exit 1
+    elif [ "$days" -lt 90 ]; then
+      warn "signing key ${signkey%!} expires in $days days ($(date -u -d "@$expiry" +%Y-%m-%d)). Extend it, and note that users who already installed the keyring will need the refreshed file."
+    fi
+  fi
+
+  gpgopts=(--batch --yes --quiet --local-user "$signkey")
   if [ -n "${APT_GPG_PASSPHRASE:-}" ]; then
     gpgopts+=(--pinentry-mode loopback --passphrase "$APT_GPG_PASSPHRASE")
   fi
@@ -173,9 +214,9 @@ if [ -n "${APT_GPG_PRIVATE_KEY:-}" ]; then
   gpg "${gpgopts[@]}" --armor --detach-sign -o "dists/$SUITE/Release.gpg" "dists/$SUITE/Release"
 
   # The binary form is what `signed-by=` in a sources.list entry wants.
-  gpg --export "$keyid" > "$public/vab-archive-keyring.gpg"
-  gpg --export --armor "$keyid" > "$public/KEY.asc"
-  echo "  signed with $keyid"
+  gpg --export "$primary" > "$public/vab-archive-keyring.gpg"
+  gpg --export --armor "$primary" > "$public/KEY.asc"
+  echo "  signed with $signkey"
 else
   cat >&2 <<'UNSIGNED'
   warning: APT_GPG_PRIVATE_KEY is not set, so dists/stable/Release is unsigned.

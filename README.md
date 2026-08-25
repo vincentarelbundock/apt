@@ -52,31 +52,69 @@ builds unsigned with a loud warning when it is not. Unsigned means every user
 has to add `[trusted=yes]`, which turns off the only check that proves the
 packages came from here, so it is worth setting up once.
 
-Generate a signing key that does nothing else. It should be a repository key,
-not a personal identity, and it should never be the key used for anything
-else:
+Whatever key is used, **export only a signing subkey to CI, never the primary
+secret**. A leaked subkey costs one revoked subkey and a refreshed keyring; a
+leaked primary costs the whole identity. The build handles either shape, but
+it prints which key it signed with so the difference is visible in the log.
+
+### Using a personal key
+
+If you already have a personal GPG key, add a signing subkey to it and export
+that:
 
 ```sh
-gpg --batch --pinentry-mode loopback --passphrase "" \
+# The primary key's fingerprint.
+fpr=$(gpg --list-keys --with-colons vincent@arelbundock.com \
+        | awk -F: '/^fpr:/ { print $10; exit }')
+
+# A signing subkey that does nothing else and does not expire.
+gpg --quick-add-key "$fpr" rsa4096 sign never
+
+# The subkey id, and the secret half of that subkey ALONE. The trailing "!"
+# is what restricts the export to exactly this subkey.
+sub=$(gpg --list-keys --with-colons "$fpr" \
+        | awk -F: '$1 == "sub" && $12 ~ /s/ { print $5 }' | tail -1)
+gpg --armor --export-secret-subkeys "${sub}!" \
+  | gh secret set APT_GPG_PRIVATE_KEY --repo vincentarelbundock/apt
+```
+
+The primary secret never leaves your machine. If the subkey is ever exposed,
+`gpg --quick-revoke-key` it, add a new one, update the secret, and rerun the
+workflow; users pick up the refreshed keyring on their next `apt update` only
+if they reinstall the keyring file, so plan on announcing it.
+
+### Using a dedicated archive key
+
+If you would rather keep this separate from your identity, generate a key that
+does nothing else:
+
+```sh
+gpg --batch --pinentry-mode loopback --passphrase '' \
   --quick-generate-key "vab apt repository <vincent@arelbundock.com>" \
   rsa4096 sign never
+
+gpg --armor --export-secret-keys "vab apt repository" \
+  | gh secret set APT_GPG_PRIVATE_KEY --repo vincentarelbundock/apt
 ```
 
-`never` means the key does not expire, which matters here: an expired archive
-key makes `apt update` fail for everyone with no obvious cause. Then export
-the private half and add it as a repository secret:
+Back the private half up offline. Losing it is recoverable but noisy: every
+user has to install a new keyring before `apt update` works again.
 
-```sh
-gpg --armor --export-secret-keys "vab apt repository" | gh secret set APT_GPG_PRIVATE_KEY --repo vincentarelbundock/apt
-```
+### Passphrases and expiry
 
-If the key has a passphrase, set `APT_GPG_PASSPHRASE` too. The build exports
-the public half to `vab-archive-keyring.gpg` (binary, for `signed-by=`) and
-`KEY.asc` (armored), so users never fetch it from a keyserver.
+If the key has a passphrase, set `APT_GPG_PASSPHRASE` as a second secret; the
+build passes it through to gpg.
 
-Back the private key up somewhere offline. Losing it is recoverable but
-noisy: every user has to install a new keyring before `apt update` works
-again.
+`never` in the commands above is deliberate. An expired archive key makes
+`apt update` fail for everyone with an error that does not obviously name the
+cause, and extending the expiry here does not help anyone who already
+installed the keyring file. The build refuses to publish with an expired
+signing key and warns for 90 days beforehand.
+
+The public half is exported to `vab-archive-keyring.gpg` (binary, for
+`signed-by=`) and `KEY.asc` (armored) on every build, so users never fetch it
+from a keyserver. Both carry the whole public key including subkeys, so
+rotating the signing subkey does not invalidate a keyring a user already has.
 
 ## Testing locally
 
