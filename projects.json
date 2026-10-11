@@ -43,6 +43,24 @@
         "amd64": "x86_64-unknown-linux-gnu",
         "arm64": "aarch64-unknown-linux-gnu"
       }
+    },
+    {
+      "name": "dadrock",
+      "repo": "vincentarelbundock/dadr",
+      "deb_pattern": "dadrock_*_ARCH.deb",
+      "arches": {
+        "amd64": "x86_64-unknown-linux-gnu",
+        "arm64": "aarch64-unknown-linux-gnu"
+      }
+    },
+    {
+      "name": "dadrock-desktop",
+      "repo": "vincentarelbundock/dadr",
+      "deb_pattern": "dadrock-desktop_*_ARCH.deb",
+      "arches": {
+        "amd64": "x86_64-unknown-linux-gnu",
+        "arm64": "aarch64-unknown-linux-gnu"
+      }
     }
   ]
 }
