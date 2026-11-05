@@ -61,6 +61,14 @@
         "amd64": "x86_64-unknown-linux-gnu",
         "arm64": "aarch64-unknown-linux-gnu"
       }
+    },
+    {
+      "name": "librepaper",
+      "repo": "LibrePaper/librepaper",
+      "deb_pattern": "librepaper_*_ARCH.deb",
+      "arches": {
+        "amd64": "x86_64-unknown-linux-musl"
+      }
     }
   ]
 }
