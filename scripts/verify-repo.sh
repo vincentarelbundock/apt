@@ -31,6 +31,12 @@ fi
 
 echo "$entry" | sudo tee /etc/apt/sources.list.d/vab-verify.list >/dev/null
 
+# Refresh the distribution's indexes first. The runner image ships indexes from
+# the day it was built, and once Ubuntu replaces a package in its pool the old
+# file is gone, so a dependency resolved from that stale index (WebKitGTK's
+# GStreamer and Mesa, for librepaper) fails with 404 Not Found.
+sudo apt-get update
+
 # Only this repository, so a name that also exists in Debian cannot silently
 # satisfy the install and make the check pass for the wrong reason.
 sudo apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/vab-verify.list \
